@@ -49,8 +49,6 @@ PARAM_DNS2=''
 PARAM_DATA_PATH=''
 PARAM_WEBPASSWORD=''
 PARAM_LOG_FILE=''
-INFO_NETWORK_IP=''
-INFO_BROADCAST_IP=''
 FORCE='false'
 LOG_PREFIX=''
 COMMAND=''
@@ -85,13 +83,15 @@ usage() {
     echo "  update                 Update Pi-hole to latest version using existing settings"
     echo
     echo "Installation parameters:"
-    echo "  -i, --ip               Static IP address of Pi-hole (required)"
-    echo "  -s, --subnet           Subnet of the virtual network"
-    echo "  -g, --gateway          Gateway of the virtual network"
-    echo "  -r, --range            IP range with CIDR notation of the virtual network"
-    echo "  -v, --vlan             Name of the virtual network"
-    echo "  -n, --interface        Physical interface of the virtual network"
-    echo "  -m, --mac              Unicast MAC address"
+    echo "  -i, --ip               Static IP address of Pi-hole (required)."
+    echo "  -s, --subnet           Subnet of the LAN."
+    echo "  -g, --gateway          Gateway of the LAN."
+    echo "  -r, --range            IP range (CIDR notation) from local subnet. Designates the pool of addresses"
+    echo "                         reserved for containers attached to the generated docker macvlan network."
+    echo "                         Range should be distinct from LAN DHCP pool."
+    echo "  -v, --vlan             Name of the generated macvlan 'docker network'."
+    echo "  -n, --interface        Physical interface to bind 'docker network' to."
+    echo "  -m, --mac              Pi-hole container Unicast MAC address"
     echo "  -d, --domain           Fully qualified domain name"
     echo "  -H, --host             Hostname of Pi-hole"
     echo "  -t, --timezone         Timezone for Pi-hole"
@@ -165,7 +165,7 @@ is_valid_ip() {
 # Returns 0 (successful) if an IPv4 address and routing suffix (CIDR format) comply with expected format
 is_valid_cidr_network() {
     local CIDR_REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))'
-    CIDR_REGEX+='(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
+    CIDR_REGEX+='(\/([8-9]|[1-2][0-9]|3[0-2]))$'
     [[ $1 =~ ^$CIDR_REGEX$ ]] && return 0 || return 1
 }
 
@@ -186,7 +186,6 @@ function convert_ip_to_int() {
 
 # Returns 0 if an IP address ($1) is in available CIDR range ($2), returns 1 otherwise
 # Assumes IP address and CIDR range are valid parameters
-# Note: the network address and broadcast address are considered unavailable
 function is_ip_in_range() {
     local IP=($1)
     local IP_CIDR=($2)
@@ -197,7 +196,21 @@ function is_ip_in_range() {
     local HOSTMIN_INT=$(convert_ip_to_int "$HOSTMIN")
     local HOSTMAX_INT=$(convert_ip_to_int "$HOSTMAX")
 
-    [ "$IP_INT" -gt "$HOSTMIN_INT" ] && [ "$IP_INT" -lt "$HOSTMAX_INT" ] && return 0 || return 1
+    [ "$IP_INT" -ge "$HOSTMIN_INT" ] && [ "$IP_INT" -le "$HOSTMAX_INT" ] && return 0 || return 1
+}
+
+# Returns 0 if IP address is not a valid unicast address of the subnet, returns 1 otherwise
+# Assumes IP address and CIDR subnet are valid parameters
+function is_ip_in_subnet() {
+    local IP=($1)
+    local SUBNET_CIDR=($2)
+
+    local IP_INT=$(convert_ip_to_int "$IP")
+    local SUBNET_BCAST=$(ipcalc -b "$SUBNET_CIDR" | cut -f2 -d=) # LAN network broadcast address
+    local SUBNET_BCAST_INT=$(convert_ip_to_int "$SUBNET_BCAST_INT")
+    
+    is_ip_in_range "$1" "2"
+    [ $? == 0 ] && [ "$IP_INT" -ne "$SUBNET_BCAST_INT" ] && return 0 || return 1
 }
 
 # Detects available versions for Pi-hole
@@ -257,10 +270,9 @@ init_auto_detected_values() {
     fi
     
     if [ -z "$PARAM_IP_RANGE" ] && [ ! -z "$PARAM_PIHOLE_IP" ] ; then
-        # Find network address for minimum range containing Pi-hole IP (4 addresses)
+        # Find network address for minimum range containing Pi-hole IP (1 address)
         # Note: the network address or broadcast address might clash with the Pi-hole IP (validate with is_ip_in_range)
-        local HOSTMIN=$(ipcalc -n "$PARAM_PIHOLE_IP/30" | cut -f2 -d=)  # network address is start of the range
-        PARAM_IP_RANGE="$HOSTMIN/30"
+        PARAM_IP_RANGE="$PARAM_PIHOLE_IP/32"
     fi
 
     if [ -z "$PARAM_INTERFACE" ] ; then
@@ -277,13 +289,6 @@ init_auto_detected_values() {
         PARAM_TIMEZONE=$(find /usr/share/zoneinfo/ -type f -exec sh -c "diff -q /etc/localtime '{}' \
             > /dev/null && echo {}" \; | sed 's|/usr/share/zoneinfo/||g')
     fi
-
-    # initialize informational parameters
-    is_valid_cidr_network "$PARAM_IP_RANGE"
-    if [ $? == 0 ] ; then
-        INFO_NETWORK_IP=$(ipcalc -n "$PARAM_IP_RANGE" | cut -f2 -d=)  # network address of the range
-        INFO_BROADCAST_IP=$(ipcalc -b "$PARAM_IP_RANGE" | cut -f2 -d=)  # broadcast address of the range
-    fi
 }
 
 # Replaces escaped old string $1 with escaped new string $2 in file $3
@@ -299,6 +304,7 @@ safe_replace_in_file() {
 # Validate parameter settings
 validate_settings() {
     local INVALID_SETTINGS=""
+    local WARNING_SETTINGS=""
 
     # validate mandatory parameters conform to expected value
     is_valid_ip "$PARAM_PIHOLE_IP"
@@ -318,7 +324,10 @@ validate_settings() {
     [ $? == 1 ] && INVALID_SETTINGS+="Invalid IP range:     ${PARAM_IP_RANGE}\n"
 
     is_ip_in_range "$PARAM_PIHOLE_IP" "$PARAM_IP_RANGE"
-    [ $? == 1 ] && INVALID_SETTINGS+="IP '$PARAM_PIHOLE_IP' not available in range '$PARAM_IP_RANGE'\n"
+    [ $? == 1 ] && WARNING_SETTINGS+="IP '$PARAM_PIHOLE_IP' not in range '$PARAM_IP_RANGE'\n"
+    
+    is_ip_in_subnet "$PARAM_PIHOLE_IP "$PARAM_SUBNET"
+    [ $? == 1 ] && INVALID_SETTINGS+="IP '$PARAM_PIHOLE_IP' is not valid in subnet 'PARAM_PIHOLE_IP'\n"
 
     is_valid_mac_address "$PARAM_MAC_ADDRESS"
     [ $? == 1 ] && INVALID_SETTINGS+="Invalid MAC address:  ${PARAM_MAC_ADDRESS}\n"
@@ -335,6 +344,8 @@ validate_settings() {
     if [ "$INVALID_SETTINGS" ] ; then
         log "$INVALID_SETTINGS"
         terminate "Invalid parameters"
+    elif [ "$WARNING_SETTINGS" ] ; then
+        log "$WARNING_SETTINGS"
     fi
 }
 
@@ -418,8 +429,6 @@ init_settings() {
     log "Subnet:       $PARAM_SUBNET"
     log "Gateway:      $PARAM_GATEWAY"
     log "IP range:     $PARAM_IP_RANGE"
-    log "Network IP:   $INFO_NETWORK_IP"
-    log "Broadcast IP: $INFO_BROADCAST_IP"
     log "VLAN:         $PARAM_VLAN_NAME"
     log "Interface:    $PARAM_INTERFACE"
     log "MAC address:  $PARAM_MAC_ADDRESS"
