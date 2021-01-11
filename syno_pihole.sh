@@ -325,13 +325,14 @@ init_generated_values() {
     # host macvlan bridge ip
     if [ -z "$PARAM_HOST_IP" ] ; then
         local ip=$(ipcalc -n "$PARAM_IP_RANGE" | cut -f2 -d=)
-        local ip_int=$(convert_ip_to_int "$ip") ph_int=$(convert_ip_to_int "$PARAM_PIHOLE_IP")
+        local ip_int=$(convert_ip_to_int "$ip")
+        local ph_int=$(convert_ip_to_int "$PARAM_PIHOLE_IP")
 
         if [ ip_int == ph_int ] ; then
             ip_int++
         fi
     fi
-    PARAM_HOST_IP=$(convert_int_to_ip "ip_int")
+    PARAM_HOST_IP=$(convert_int_to_ip "$ip_int")
 }
 
 # Replaces escaped old string $1 with escaped new string $2 in file $3
@@ -373,6 +374,11 @@ validate_settings() {
     [ $? == 1 ] && INVALID_SETTINGS+="Invalid Pi-hole IP:   ${PARAM_PIHOLE_IP}\n"
     is_cidr_in_subnet "$PARAM_PIHOLE_IP/32" "$PARAM_SUBNET"
     [ $? == 1 ] && INVALID_SETTINGS+="Pi-hole IP address '$PARAM_PIHOLE_IP' is not valid in subnet '$PARAM_SUBNET\n"
+
+    is_valid_ip "$PARAM_HOST_IP"
+    [ $? == 1 ] && INVALID_SETTINGS+="Invalid Host IP:   ${PARAM_HOST_IP}\n"
+    is_cidr_in_subnet "$PARAM_HOST_IP/32" "$PARAM_SUBNET"
+    [ $? == 1 ] && INVALID_SETTINGS+="Host IP address '$PARAM_HOST_IP' is not valid in subnet '$PARAM_SUBNET\n"
 
     is_valid_cidr "$PARAM_IP_RANGE"
     [ $? == 1 ] && INVALID_SETTINGS+="Invalid IP range:     ${PARAM_IP_RANGE}\n"
