@@ -207,8 +207,8 @@ function convert_int_to_ip() {
 # Returns 0 if an IP address ($1) is in available CIDR range ($2), returns 1 otherwise
 # Assumes IP address and CIDR range are valid parameters
 function is_ip_in_range() {
-    local IP=($1)
-    local IP_CIDR=($2)
+    local IP="$1"
+    local IP_CIDR="$2"
 
     local IP_INT=$(convert_ip_to_int "$IP")
     local CIDR_MIN_IP=$(ipcalc -n "$IP_CIDR" | cut -f2 -d=)  # network address is start of the range
@@ -222,13 +222,13 @@ function is_ip_in_range() {
 # Returns 0 if CIDR range is a valid unicast address range of the subnet, returns 1 otherwise
 # Assumes both arguments are are valid CIDR values
 function is_cidr_in_subnet() {
-    local RANGE_CIDR=($1)
-    local SUBNET_CIDR=($2)
+    local RANGE_CIDR="$1"
+    local SUBNET_CIDR="$2"
     local RANGE_PREFIX_SIZE=$(echo "$RANGE_CIDR" | cut -d/ -f2)
     local SUBNET_PREFIX_SIZE=$(echo "$SUBNET_CIDR" | cut -d/ -f2)
 
-    # range prefix must be smaller than local subnets
-    [ $RANGE_PREFIX_SIZE -ge $SUBNET_PREFIX_SIZE ] && return 1
+    # range prefix must be bigger than local subnets
+    [ $RANGE_PREFIX_SIZE -le $SUBNET_PREFIX_SIZE ] && return 1
 
     # local broadcast address conflict?
     local SUBNET_BCAST=$(ipcalc -b "$SUBNET_CIDR" | cut -f2 -d=)
