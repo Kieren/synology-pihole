@@ -362,7 +362,7 @@ validate_settings() {
     is_valid_ip "$PARAM_GATEWAY"
     [ $? == 1 ] && INVALID_SETTINGS+="Invalid gateway:      ${PARAM_GATEWAY}\n"
     is_cidr_in_subnet "$PARAM_GATEWAY/32" "$PARAM_SUBNET"
-    [ $? == 1 ] && INVALID_SETTINGS+="Gateway address '$PARAM_GATEWAY' is not in subnet: 'PARAM_SUBNET'"
+    [ $? == 1 ] && INVALID_SETTINGS+="Gateway address '$PARAM_GATEWAY' is not in subnet: '$PARAM_SUBNET'\n"
 
     # A valid docker network range should be contained by the local subnet.
     # The IP range designates a pool of IP addresses that docker allocates (by default) to containers
@@ -887,3 +887,4 @@ case "$COMMAND" in
 esac
 
 log "Done."
+
