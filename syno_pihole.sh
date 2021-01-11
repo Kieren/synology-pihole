@@ -328,7 +328,7 @@ init_generated_values() {
         local ip_int=$(convert_ip_to_int "$ip")
         local ph_int=$(convert_ip_to_int "$PARAM_PIHOLE_IP")
 
-        if [ ip_int == ph_int ] ; then
+        if [ $ip_int == $ph_int ] ; then
             ip_int++
         fi
         PARAM_HOST_IP=$(convert_int_to_ip "$ip_int")
