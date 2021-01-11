@@ -331,8 +331,8 @@ init_generated_values() {
         if [ ip_int == ph_int ] ; then
             ip_int++
         fi
+        PARAM_HOST_IP=$(convert_int_to_ip "$ip_int")
     fi
-    PARAM_HOST_IP=$(convert_int_to_ip "$ip_int")
 }
 
 # Replaces escaped old string $1 with escaped new string $2 in file $3
