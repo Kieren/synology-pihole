@@ -645,13 +645,13 @@ execute_create_macvlan() {
     ip link add "$PARAM_VLAN_NAME" link "$PARAM_INTERFACE" type macvlan mode bridge
     
     # assign host address to macvlan
-    STATUS=$(ip addr | grep "$PARAM_VLAN_NAME")
+    STATUS=$(ip address | grep "$PARAM_VLAN_NAME")
     if [ -z "$STATUS" ] ; then
         log "Assign IP address '$PARAM_HOST_IP' to '$PARAM_VLAN_NAME'"
-        ip addr add "$PARAM_HOST_IP/32" dev "$PARAM_VLAN_NAME" > /dev/null 2>&1
+        ip address add "$PARAM_HOST_IP/32" dev "$PARAM_VLAN_NAME" > /dev/null 2>&1
     else # this should never happen because link is deleted above if exists
         log "Updating current IP address of '$PARAM_VLAN_NAME' to '$PARAM_HOST_IP'"
-        ip addr change "$PARAM_HOST_IP/32" dev "$PARAM_VLAN_NAME" > /dev/null 2>&1
+        ip address change "$PARAM_HOST_IP/32" dev "$PARAM_VLAN_NAME" > /dev/null 2>&1
     fi
 
     # bring macvlan interface up
@@ -661,8 +661,8 @@ execute_create_macvlan() {
     # add route to Pi-hole IP on macvlan interface
     STATUS=$(ip route | grep "$PARAM_VLAN_NAME" | grep "$PARAM_PIHOLE_IP")
     if [ -z "$STATUS" ] ; then
-        log "Adding static route from '$PARAM_PIHOLE_IP/32' to '$PARAM_VLAN_NAME'"
-        ip route add "$PARAM_PIHOLE_IP/32" dev "$PARAM_VLAN_NAME" > /dev/null 2>&1
+        log "Adding static route from host to '$PARAM_IP_RANGE' to '$PARAM_VLAN_NAME'"
+        ip route add "$PARAM_IP_RANGE" dev "$PARAM_VLAN_NAME" > /dev/null 2>&1
     fi
 
     # check virtual adapter status
