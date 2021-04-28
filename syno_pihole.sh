@@ -984,24 +984,24 @@ execute_create_macvlan() {
     ip link add "${param_vlan_name}" link "${param_interface}" type macvlan mode bridge
     
     # assign host address to macvlan
-    status=$(ip addr | grep "${param_vlan_name}")
+    status=$(ip address | grep "${param_vlan_name}")
     if [ -z "${status}" ] ; then
         log "Assign IP address '${param_host_ip}' to '${param_vlan_name}'"
-        ip addr add "${param_host_ip}/32" dev "${param_vlan_name}" > /dev/null 2>&1
+        ip address add "${param_host_ip}/32" dev "${param_vlan_name}" > /dev/null 2>&1
     else # this should never happen because link is deleted above if exists
         log "Updating current IP address of '${param_vlan_name}' to '${param_host_ip}'"
-        ip addr change "${param_host_ip}/32" dev "${param_vlan_name}" > /dev/null 2>&1
+        ip address change "${param_host_ip}/32" dev "${param_vlan_name}" > /dev/null 2>&1
     fi
 
     # bring macvlan interface up
     log "Bringing up interface '${param_vlan_name}'"
     ip link set "${param_vlan_name}" up > /dev/null 2>&1
 
-    # add route to Pi-hole IP on macvlan interface
-    status=$(ip route | grep "${param_vlan_name}" | grep "${param_pihole_ip}")
+    # add route to reserved ip range on macvlan interface
+    status=$(ip route | grep "${param_vlan_name}" | grep "${param_ip_range}")
     if [ -z "${status}" ] ; then
-        log "Adding static route from '${param_pihole_ip}/32' to '${param_vlan_name}'"
-        ip route add "${param_pihole_ip}/32" dev "${param_vlan_name}" > /dev/null 2>&1
+        log "Adding static route to '${param_ip_range}' for '${param_vlan_name}'"
+        ip route add "${param_ip_range}" dev "${param_vlan_name}" > /dev/null 2>&1
     fi
 
     # check virtual adapter status
